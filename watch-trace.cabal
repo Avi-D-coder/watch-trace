@@ -1,0 +1,80 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 76c011c71a69a224ad58ecf58eb6285d00ed218857e134ddea266e9912d7c229
+
+name:           watch-trace
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/Avi-D-coder/watch-trace#readme>
+homepage:       https://github.com/Avi-D-coder/watch-trace#readme
+bug-reports:    https://github.com/Avi-D-coder/watch-trace/issues
+author:         Avi Dessauer
+maintainer:     avi.the.coder@gmail.com
+copyright:      2020
+license:        BSD3
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/Avi-D-coder/watch-trace
+
+library
+  exposed-modules:
+      Debug.WatchTrace
+  other-modules:
+      Paths_watch_trace
+  hs-source-dirs:
+      src
+  ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing
+  build-depends:
+      base >=4.7 && <5
+    , fgl >=5
+    , fused-effects
+    , ghc-heap-view >=0.6
+    , hashable
+    , text
+    , unordered-containers
+  default-language: Haskell2010
+
+executable watch-trace-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_watch_trace
+  hs-source-dirs:
+      app
+  ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , fgl >=5
+    , fused-effects
+    , ghc-heap-view >=0.6
+    , hashable
+    , text
+    , unordered-containers
+    , watch-trace
+  default-language: Haskell2010
+
+test-suite watch-trace-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_watch_trace
+  hs-source-dirs:
+      test
+  ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , fgl >=5
+    , fused-effects
+    , ghc-heap-view >=0.6
+    , hashable
+    , text
+    , unordered-containers
+    , watch-trace
+  default-language: Haskell2010
