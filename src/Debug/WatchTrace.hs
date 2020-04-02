@@ -1,6 +1,134 @@
-module Debug.WatchTrace
-    ( someFunc
-    ) where
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+module Debug.WatchTrace where
+
+import Control.Algebra
+import Control.Carrier.Lift
+import Control.Carrier.Reader
+import Control.Carrier.State.Strict
+import Control.Concurrent.MVar
+import Control.Effect.Writer
+import Control.Exception
+import Control.Monad
+import Control.Monad.IO.Class (liftIO)
+import qualified Data.HashMap.Strict as M
+import qualified Data.HashSet as S
+import Data.Hashable
+import Data.Int
+import Data.Kind
+import Data.Maybe
+import qualified Data.Text as T
+import Data.Word
+import GHC.AssertNF
+import GHC.Exts
+import qualified GHC.Generics as G
+import Numeric.Natural
+import System.IO.Unsafe
+import System.Mem.StableName
+import System.Mem.Weak
+import Unsafe.Coerce
+
+class WatchDot a where
+  watchRecIO ::
+    ( Has (State Watched) s m,
+      Has (State Marked) s m,
+      Has (Writer Thunks) s m,
+      Has (Writer Elem) s m
+    ) =>
+    Maybe Parent ->
+    a ->
+    m Bool
+  default watchRecIO ::
+    ( G.Generic a,
+      GWatchRec1 (G.Rep a),
+      Has (State Watched) s m,
+      Has (State Marked) s m,
+      Has (Writer Thunks) s m,
+      Has (Writer Elem) s m
+    ) =>
+    Maybe Parent ->
+    a ->
+    m Bool
+  watchRecIO (Just (pId, el)) a = undefined
+  watchRecIO Nothing a = undefined
+
+class GWatchRec1 f where
+  gWatchRecIO1 :: f p -> Parent -> DataTypeName -> Watched -> Marked -> Thunks -> NewNodes
+
+newtype StabName = StabName (StableName Any) deriving (Eq, G.Generic)
+
+instance Show StabName where
+  show = show . hash
+
+instance Hashable StabName where
+  hashWithSalt s (StabName a) = hashWithSalt s $ hashStableName a
+
+type Watched = M.HashMap StabName (Bool, ElemId)
+
+type Thunks = [AnyWatch]
+
+type Marked = S.HashSet StabName
+
+newtype DataTypeName = DataTypeName String
+  deriving (Eq, Ord, Show, Semigroup, Monoid, IsString, G.Generic)
+
+newtype EdgeLabel = EdgeLabel String
+  deriving (Eq, Ord, Show, Semigroup, Monoid, IsString, G.Generic)
+
+type Parent = (ElemId, EdgeLabel)
+
+type NewNodes = IO ((Bool, Watched, Marked, Thunks, [Elem]), DataTypeName)
+
+newtype ElemId = ElemId Int deriving (Eq, Ord, Show, G.Generic)
+
+data Edge = Edge ElemId EdgeLabel ElemId
+  deriving (Eq, Ord, Show, G.Generic)
+
+data Elem
+  = Vertex ElemId DataTypeName
+  | E Edge
+  deriving (Eq, Ord, Show, G.Generic)
+
+data ElemQuery
+  = Ver ElemId
+  | Edg ElemId ElemId
+  | Edgs ElemId
+  deriving (Eq, Ord, Show, G.Generic)
+
+data Update
+  = New Elem
+  | Change ElemId Elem
+  | Delete ElemId
+  deriving (Eq, Ord, Show, G.Generic)
+
+data AnyWatch
+  = AnyWatch
+      { weak_val :: Weak Any,
+        pre_name :: StabName,
+        watchAny ::
+          Maybe Parent ->
+          Any ->
+          Watched ->
+          Marked ->
+          Thunks ->
+          IO (Bool, Watched, Marked, Thunks, [Elem])
+      }
+  deriving (G.Generic)
+
+watchVal = undefined

@@ -13,7 +13,7 @@ packages:
     hackage: ghc-heap-view-0.6.1
 snapshots:
 - completed:
-    size: 506684
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2020/3/23.yaml
-    sha256: cee70491d5f2801a7cc815d6a467ba5734c1d8caa99698d957a81f1f41111258
-  original: nightly-2020-03-23
+    size: 508665
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2020/4/1.yaml
+    sha256: ec79b59e1e2bb52a973acbc8948c1685dcb409d5899fcc26189a2b7f94ca7ff3
+  original: nightly-2020-04-01

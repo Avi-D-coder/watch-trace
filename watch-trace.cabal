@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 76c011c71a69a224ad58ecf58eb6285d00ed218857e134ddea266e9912d7c229
+-- hash: bb11dd4db4acbecd0f346849202de0f21bd272f431eebb0ae38748bdeb5ac15c
 
 name:           watch-trace
 version:        0.1.0.0
@@ -26,6 +26,7 @@ source-repository head
 
 library
   exposed-modules:
+      Data.Generics.Internal.WatchTrace
       Debug.WatchTrace
   other-modules:
       Paths_watch_trace
