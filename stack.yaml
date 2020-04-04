@@ -41,6 +41,8 @@ packages:
 #
 extra-deps:
 - ghc-heap-view-0.6.1
+- git: https://github.com/fused-effects/fused-effects
+  commit: 40cf33031576f179c9e4ba3f9e8a33ba642fcc91
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

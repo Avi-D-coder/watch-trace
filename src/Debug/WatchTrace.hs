@@ -4,9 +4,11 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -26,7 +28,7 @@ import Control.Concurrent.MVar
 import Control.Effect.Writer
 import Control.Exception
 import Control.Monad
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class
 import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
 import Data.Hashable
@@ -43,6 +45,7 @@ import System.IO.Unsafe
 import System.Mem.StableName
 import System.Mem.Weak
 import Unsafe.Coerce
+import Prelude
 
 class WatchDot a where
   watchRecIO ::
@@ -130,5 +133,33 @@ data AnyWatch
           IO (Bool, Watched, Marked, Thunks, [Elem])
       }
   deriving (G.Generic)
+
+-- Effects
+data MkStableName (m :: Type -> Type) k where
+  MkStab :: Any -> MkStableName m StabName
+
+mkStab :: Has MkStableName s m => Any -> m StabName
+mkStab = send . MkStab
+
+newtype MkStableNameIOC m a = MkStableNameIOC {runMkStableNameIO :: m a}
+  deriving (Applicative, Functor, Monad, MonadIO)
+
+instance (MonadIO m, Algebra sig m) => Algebra (MkStableName :+: sig) (MkStableNameIOC m) where
+  alg hdl sig ctx = case sig of
+    L (MkStab a) -> (<$ ctx) <$> liftIO (StabName <$> makeStableName a)
+    R other -> MkStableNameIOC (alg (runMkStableNameIO . hdl) other ctx)
+
+data MkWeakPtr (m :: Type -> Type) k where
+  MkWeakPtr :: a -> Maybe (IO ()) -> MkWeakPtr m (Weak a)
+
+newtype MkWeakPtrIOC m a = MkWeakPtrIOC {runMkWeakPtrIO :: m a}
+  deriving (Applicative, Functor, Monad, MonadIO)
+
+instance (MonadIO m, Algebra sig m) => Algebra (MkWeakPtr :+: sig) (MkWeakPtrIOC m) where
+  alg hdl sig ctx = case sig of
+    L (MkWeakPtr a f) -> (<$ ctx) <$> liftIO (mkWeakPtr a f)
+    R other -> MkWeakPtrIOC (alg (runMkWeakPtrIO . hdl) other ctx)
+
+--
 
 watchVal = undefined
