@@ -15,6 +15,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -32,6 +33,7 @@ import Control.Monad.IO.Class
 import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
 import Data.Hashable
+import Data.IORef
 import Data.Int
 import Data.Kind
 import Data.Maybe
@@ -43,7 +45,8 @@ import qualified GHC.Generics as G
 import Numeric.Natural
 import System.IO.Unsafe
 import System.Mem.StableName
-import System.Mem.Weak
+import qualified System.Mem.Weak as W
+import System.Mem.Weak (Weak)
 import Unsafe.Coerce
 import Prelude
 
@@ -52,27 +55,29 @@ class WatchDot a where
     ( Has (State Watched) s m,
       Has (State Marked) s m,
       Has (Writer Thunks) s m,
-      Has (Writer Elem) s m
+      Has (Writer Elem) s m,
+      Has (Writer Bool) s m
     ) =>
     Maybe Parent ->
     a ->
-    m Bool
+    m ()
   default watchRecIO ::
     ( G.Generic a,
       GWatchRec1 (G.Rep a),
       Has (State Watched) s m,
       Has (State Marked) s m,
       Has (Writer Thunks) s m,
-      Has (Writer Elem) s m
+      Has (Writer Elem) s m,
+      Has (Writer Bool) s m
     ) =>
     Maybe Parent ->
     a ->
-    m Bool
+    m ()
   watchRecIO (Just (pId, el)) a = undefined
   watchRecIO Nothing a = undefined
 
 class GWatchRec1 f where
-  gWatchRecIO1 :: f p -> Parent -> DataTypeName -> Watched -> Marked -> Thunks -> NewNodes
+  gWatchRecIO1 :: f p -> Parent -> DataTypeName -> m ()
 
 newtype StabName = StabName (StableName Any) deriving (Eq, G.Generic)
 
@@ -152,14 +157,76 @@ instance (MonadIO m, Algebra sig m) => Algebra (MkStableName :+: sig) (MkStableN
 data MkWeakPtr (m :: Type -> Type) k where
   MkWeakPtr :: a -> Maybe (IO ()) -> MkWeakPtr m (Weak a)
 
+mkWeakPtr :: Has MkWeakPtr s m => a -> Maybe (IO ()) -> m (Weak a)
+mkWeakPtr a f = send (MkWeakPtr a f)
+
 newtype MkWeakPtrIOC m a = MkWeakPtrIOC {runMkWeakPtrIO :: m a}
   deriving (Applicative, Functor, Monad, MonadIO)
 
 instance (MonadIO m, Algebra sig m) => Algebra (MkWeakPtr :+: sig) (MkWeakPtrIOC m) where
   alg hdl sig ctx = case sig of
-    L (MkWeakPtr a f) -> (<$ ctx) <$> liftIO (mkWeakPtr a f)
+    L (MkWeakPtr a f) -> (<$ ctx) <$> liftIO (W.mkWeakPtr a f)
     R other -> MkWeakPtrIOC (alg (runMkWeakPtrIO . hdl) other ctx)
 
---
+data IsHnf (m :: Type -> Type) k where
+  IsHnf :: a -> IsHnf m Bool
 
-watchVal = undefined
+newtype IsHnfIOC m a = IsHnfIOC {runIsHnfIO :: m a}
+  deriving (Applicative, Functor, Monad, MonadIO)
+
+isHnf :: Has IsHnf s m => a -> m Bool
+isHnf = send . IsHnf
+
+instance (MonadIO m, Algebra sig m) => Algebra (IsHnf :+: sig) (IsHnfIOC m) where
+  alg hdl sig ctx = case sig of
+    -- FIXME isNF is not checking for head normal form
+    L (IsHnf a) -> (<$ ctx) <$> liftIO (isNF a)
+    R other -> IsHnfIOC (alg (runIsHnfIO . hdl) other ctx)
+
+data IdAlloc (m :: Type -> Type) k where
+  NewId :: IdAlloc m Int
+
+newId :: Has IdAlloc s m => m Int
+newId = send NewId
+
+newtype IdAllocAtomic m a = IdAllocAtomic {runIdAllocAtomic :: m a}
+  deriving (Applicative, Functor, Monad, MonadIO)
+
+instance
+  (Has (Reader (IORef Int)) sig m, MonadIO m, Algebra sig m) =>
+  Algebra (IdAlloc :+: sig) (IdAllocAtomic m)
+  where
+  alg _ (L act) ctx = do
+    ref <- ask @(IORef Int)
+    case act of
+      NewId ->
+        (<$ ctx)
+          <$> liftIO
+            ( atomicModifyIORef'
+                ref
+                (\i -> let i' = i + 1 in (i', i'))
+            )
+  alg hdl (R other) ctx = IdAllocAtomic (alg (runIdAllocAtomic . hdl) other ctx)
+
+watchVal ::
+  ( WatchDot a,
+    GWatchRec1 (G.Rep a),
+    Has (State Watched) s m,
+    Has (State Marked) s m,
+    Has (Writer Thunks) s m,
+    Has (Writer Elem) s m,
+    Has (Writer Bool) s m,
+    Has MkStableName s m
+  ) =>
+  a ->
+  Bool ->
+  m ()
+watchVal a is_pure_hnf = do
+  let a' :: Any = unsafeCoerce a
+  name <- mkStab a'
+  undefined
+
+watchRecIOPrim :: (WatchDot a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
+watchRecIOPrim p l a = do
+  nf <- isHnf a
+  undefined
