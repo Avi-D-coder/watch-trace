@@ -339,4 +339,9 @@ instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:+: b) where
   gWatchRec1 (G.R1 a) = gWatchRec1 a
 
 instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:*: b) where
-  gWatchRec1 (a G.:*: b) p d = undefined -- ((gWatchRec1 a p (DataTypeName "")) >> (gWatchRec1 b p (DataTypeName "")))
+  gWatchRec1 (a G.:*: b) p d = gWatchRec1 a p (d <> ", ") >> gWatchRec1 b p (d <> ", ")
+
+
+instance {-# OVERLAPPING #-} WatchTrace a => WatchTrace (Maybe a)
+
+instance {-# OVERLAPPING #-} WatchTrace a => WatchTrace [a]
