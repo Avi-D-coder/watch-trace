@@ -183,30 +183,36 @@ instance (MonadIO m, Algebra sig m) => Algebra (IsHnf :+: sig) (IsHnfIOC m) wher
     L (IsHnf a) -> (<$ ctx) <$> liftIO (isNF a)
     R other -> IsHnfIOC (alg (runIsHnfIO . hdl) other ctx)
 
-data IdAlloc (m :: Type -> Type) k where
-  NewId :: IdAlloc m Int
+data Counter (m :: Type -> Type) k where
+  Add :: Int -> Counter m Int
 
-newId :: Has IdAlloc s m => m Int
-newId = send NewId
+add :: Has Counter s m => Int -> m Int
+add = send . Add
 
-newtype IdAllocAtomic m a = IdAllocAtomic {runIdAllocAtomic :: m a}
-  deriving (Applicative, Functor, Monad, MonadIO)
+inc :: Has Counter s m => m Int
+inc = send $ Add 1
 
-instance
-  (Has (Reader (IORef Int)) sig m, MonadIO m, Algebra sig m) =>
-  Algebra (IdAlloc :+: sig) (IdAllocAtomic m)
-  where
-  alg _ (L act) ctx = do
-    ref <- ask @(IORef Int)
-    case act of
-      NewId ->
-        (<$ ctx)
-          <$> liftIO
-            ( atomicModifyIORef'
-                ref
-                (\i -> let i' = i + 1 in (i', i'))
+newtype CounterAtomicIORef m a = CounterAtomicIORef {runCounterAtomicIORef :: ReaderC (IORef Int) m a}
+  deriving (Applicative, Functor, Monad, MonadFail, MonadIO)
+
+instance Has (Lift IO) sig m => Algebra (Counter :+: sig) (CounterAtomicIORef m) where
+  alg hdl sig ctx = case sig of
+    L (Add n) ->
+      (<$ ctx)
+        <$> ( CounterAtomicIORef ask >>= sendM
+                . ( \ref ->
+                      atomicModifyIORef' ref (\i -> let i' = i + n in (i', i'))
+                  )
             )
-  alg hdl (R other) ctx = IdAllocAtomic (alg (runIdAllocAtomic . hdl) other ctx)
+    R other -> CounterAtomicIORef (alg (runCounterAtomicIORef . hdl) (R other) ctx)
+
+newtype CounterState m a = CounterState {runCounterState :: ReaderC (IORef Int) m a}
+  deriving (Applicative, Functor, Monad, MonadFail, MonadIO)
+
+instance Has (State Int) sig m => Algebra (Counter :+: sig) (CounterState m) where
+  alg hdl sig ctx = case sig of
+    L (Add n) -> (<$ ctx) <$> ((n +) <$> get >>= (\p -> put p >> pure p))
+    R other -> CounterState (alg (runCounterState . hdl) (R other) ctx)
 
 watchVal ::
   ( WatchDot a,
