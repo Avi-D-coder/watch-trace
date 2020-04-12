@@ -57,7 +57,7 @@ class WatchTrace a where
       Has (Writer Thunks) s m,
       Has (Writer Elem) s m,
       Has (Writer Bool) s m,
-      Has (IsHnf) s m
+      Has IsHnf s m
     ) =>
     Maybe Parent ->
     a ->
@@ -70,7 +70,7 @@ class WatchTrace a where
       Has (Writer Thunks) s m,
       Has (Writer Elem) s m,
       Has (Writer Bool) s m,
-      Has (IsHnf) s m
+      Has IsHnf s m
     ) =>
     Maybe Parent ->
     a ->
@@ -84,7 +84,7 @@ instance
     Has (Writer Thunks) s m,
     Has (Writer Elem) s m,
     Has (Writer Bool) s m,
-    Has (IsHnf) s m
+    Has IsHnf s m
   ) =>
   WatchTrace a
   where
@@ -93,7 +93,18 @@ instance
   watchRec Nothing a = undefined
 
 class GWatchRec1 f where
-  gWatchRec1 :: f p -> Parent -> DataTypeName -> m ()
+  gWatchRec1 ::
+    ( Has (State Watched) s m,
+      Has (State Marked) s m,
+      Has (Writer Thunks) s m,
+      Has (Writer Elem) s m,
+      Has (Writer Bool) s m,
+      Has IsHnf s m
+    ) =>
+    f p ->
+    Parent ->
+    DataTypeName ->
+    m ()
 
 newtype StabName = StabName (StableName Any) deriving (Eq, G.Generic)
 
@@ -312,7 +323,7 @@ instance (G.Selector m, GWatchRec1 a) => GWatchRec1 (G.S1 m a) where
   gWatchRec1 m@(G.M1 a) (pId, el) = gWatchRec1 a (pId, el <> EdgeLabel (G.selName m))
 
 instance (G.Datatype m, GWatchRec1 a) => GWatchRec1 (G.D1 m a) where
-  gWatchRec1 d@(G.M1 a) p pd  = gWatchRec1 a p $ DataTypeName $ G.datatypeName d
+  gWatchRec1 d@(G.M1 a) p pd = gWatchRec1 a p $ DataTypeName $ G.datatypeName d
 
 instance GWatchRec1 G.V1 where
   gWatchRec1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
@@ -321,7 +332,7 @@ instance GWatchRec1 G.U1 where
   gWatchRec1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
 
 instance WatchTrace a => GWatchRec1 (G.Rec0 a) where
-  gWatchRec1 (G.K1 a) p d = undefined -- watchRec (Just p) a
+  gWatchRec1 (G.K1 a) p d = watchRec (Just p) a
 
 instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:+: b) where
   gWatchRec1 (G.L1 a) = gWatchRec1 a
