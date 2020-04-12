@@ -56,7 +56,8 @@ class WatchDot a where
       Has (State Marked) s m,
       Has (Writer Thunks) s m,
       Has (Writer Elem) s m,
-      Has (Writer Bool) s m
+      Has (Writer Bool) s m,
+      Has (IsHnf) s m
     ) =>
     Maybe Parent ->
     a ->
@@ -68,7 +69,8 @@ class WatchDot a where
       Has (State Marked) s m,
       Has (Writer Thunks) s m,
       Has (Writer Elem) s m,
-      Has (Writer Bool) s m
+      Has (Writer Bool) s m,
+      Has (IsHnf) s m
     ) =>
     Maybe Parent ->
     a ->
@@ -76,8 +78,8 @@ class WatchDot a where
   watchRecIO (Just (pId, el)) a = undefined
   watchRecIO Nothing a = undefined
 
-instance (
-    Has (State Watched) s m,
+instance
+  ( Has (State Watched) s m,
     Has (State Marked) s m,
     Has (Writer Thunks) s m,
     Has (Writer Elem) s m,
@@ -205,7 +207,10 @@ add = send . Add
 inc :: Has Counter s m => m Int
 inc = send $ Add 1
 
-newtype CounterAtomicIORef m a = CounterAtomicIORef {runCounterAtomicIORef :: ReaderC (IORef Int) m a}
+newtype CounterAtomicIORef m a
+  = CounterAtomicIORef
+      { runCounterAtomicIORef :: ReaderC (IORef Int) m a
+      }
   deriving (Applicative, Functor, Monad, MonadFail, MonadIO)
 
 instance Has (Lift IO) sig m => Algebra (Counter :+: sig) (CounterAtomicIORef m) where
@@ -224,7 +229,7 @@ newtype CounterState m a = CounterState {runCounterState :: ReaderC (IORef Int) 
 
 instance Has (State Int) sig m => Algebra (Counter :+: sig) (CounterState m) where
   alg hdl sig ctx = case sig of
-    L (Add n) -> (<$ ctx) <$> ((n+) <$> get >>= (\p -> put p >> pure p))
+    L (Add n) -> (<$ ctx) <$> ((n +) <$> get >>= (\p -> put p >> pure p))
     R other -> CounterState (alg (runCounterState . hdl) (R other) ctx)
 
 watchVal ::
@@ -245,7 +250,54 @@ watchVal a is_pure_hnf = do
   name <- mkStab a'
   undefined
 
-watchRecIOPrim :: (WatchDot a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
+watchRecIOPrim ::  (WatchDot a, Show a, Has IsHnf s m)  => Maybe Parent -> String -> a -> m ()
 watchRecIOPrim p l a = do
   nf <- isHnf a
   undefined
+
+-- Instances
+
+instance {-# OVERLAPPING #-} WatchDot Bool where
+  watchRecIO p = watchRecIOPrim p "Lazy Bool"
+
+instance {-# OVERLAPPING #-} WatchDot Int where
+  watchRecIO p = watchRecIOPrim p "Lazy Int"
+
+instance {-# OVERLAPPING #-} WatchDot Int8 where
+  watchRecIO p = watchRecIOPrim p "Lazy Int*"
+
+instance {-# OVERLAPPING #-} WatchDot Int16 where
+  watchRecIO p = watchRecIOPrim p "Lazy Int16"
+
+instance {-# OVERLAPPING #-} WatchDot Int32 where
+  watchRecIO p = watchRecIOPrim p "Lazy Int32"
+
+instance {-# OVERLAPPING #-} WatchDot Int64 where
+  watchRecIO p = watchRecIOPrim p "Lazy Int64"
+
+instance {-# OVERLAPPING #-} WatchDot Word where
+  watchRecIO p = watchRecIOPrim p "Lazy Word"
+
+instance {-# OVERLAPPING #-} WatchDot Word8 where
+  watchRecIO p = watchRecIOPrim p "Lazy Word8"
+
+instance {-# OVERLAPPING #-} WatchDot Word16 where
+  watchRecIO p = watchRecIOPrim p "Lazy Word16"
+
+instance {-# OVERLAPPING #-} WatchDot Word32 where
+  watchRecIO p = watchRecIOPrim p "Lazy Word32"
+
+instance {-# OVERLAPPING #-} WatchDot Word64 where
+  watchRecIO p = watchRecIOPrim p "Lazy Word64"
+
+instance {-# OVERLAPPING #-} WatchDot Natural where
+  watchRecIO p = watchRecIOPrim p "Lazy Natural"
+
+instance {-# OVERLAPPING #-} WatchDot Integer where
+  watchRecIO p = watchRecIOPrim p "Lazy Integer"
+
+instance {-# OVERLAPPING #-} WatchDot Float where
+  watchRecIO p = watchRecIOPrim p "Lazy Float"
+
+instance {-# OVERLAPPING #-} WatchDot Double where
+  watchRecIO p = watchRecIOPrim p "Lazy Double"
