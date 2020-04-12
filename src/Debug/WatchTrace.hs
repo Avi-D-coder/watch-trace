@@ -83,7 +83,8 @@ instance
     Has (State Marked) s m,
     Has (Writer Thunks) s m,
     Has (Writer Elem) s m,
-    Has (Writer Bool) s m
+    Has (Writer Bool) s m,
+    Has (IsHnf) s m
   ) =>
   WatchDot a
   where
@@ -250,7 +251,7 @@ watchVal a is_pure_hnf = do
   name <- mkStab a'
   undefined
 
-watchRecIOPrim ::  (WatchDot a, Show a, Has IsHnf s m)  => Maybe Parent -> String -> a -> m ()
+watchRecIOPrim :: (WatchDot a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
 watchRecIOPrim p l a = do
   nf <- isHnf a
   undefined
@@ -301,3 +302,30 @@ instance {-# OVERLAPPING #-} WatchDot Float where
 
 instance {-# OVERLAPPING #-} WatchDot Double where
   watchRecIO p = watchRecIOPrim p "Lazy Double"
+
+-- Generic instances
+
+instance (G.Constructor m, GWatchRec1 a) => GWatchRec1 (G.C1 m a) where
+  gWatchRecIO1 m@(G.M1 a) (pId, el) = gWatchRecIO1 a (pId, el <> EdgeLabel (G.conName m))
+
+instance (G.Selector m, GWatchRec1 a) => GWatchRec1 (G.S1 m a) where
+  gWatchRecIO1 m@(G.M1 a) (pId, el) = gWatchRecIO1 a (pId, el <> EdgeLabel (G.selName m))
+
+instance (G.Datatype m, GWatchRec1 a) => GWatchRec1 (G.D1 m a) where
+  gWatchRecIO1 d@(G.M1 a) p pd  = gWatchRecIO1 a p $ DataTypeName $ G.datatypeName d
+
+instance GWatchRec1 G.V1 where
+  gWatchRecIO1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
+
+instance GWatchRec1 G.U1 where
+  gWatchRecIO1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
+
+instance WatchDot a => GWatchRec1 (G.Rec0 a) where
+  gWatchRecIO1 (G.K1 a) p d = undefined -- watchRecIO (Just p) a
+
+instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:+: b) where
+  gWatchRecIO1 (G.L1 a) = gWatchRecIO1 a
+  gWatchRecIO1 (G.R1 a) = gWatchRecIO1 a
+
+instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:*: b) where
+  gWatchRecIO1 (a G.:*: b) p d = undefined -- ((gWatchRecIO1 a p (DataTypeName "")) >> (gWatchRecIO1 b p (DataTypeName "")))
