@@ -76,6 +76,19 @@ class WatchDot a where
   watchRecIO (Just (pId, el)) a = undefined
   watchRecIO Nothing a = undefined
 
+instance (
+    Has (State Watched) s m,
+    Has (State Marked) s m,
+    Has (Writer Thunks) s m,
+    Has (Writer Elem) s m,
+    Has (Writer Bool) s m
+  ) =>
+  WatchDot a
+  where
+  -- TODO use ghc-heap-view to show thunks and constructors
+  watchRecIO (Just (pId, el)) a = undefined
+  watchRecIO Nothing a = undefined
+
 class GWatchRec1 f where
   gWatchRecIO1 :: f p -> Parent -> DataTypeName -> m ()
 
@@ -211,7 +224,7 @@ newtype CounterState m a = CounterState {runCounterState :: ReaderC (IORef Int) 
 
 instance Has (State Int) sig m => Algebra (Counter :+: sig) (CounterState m) where
   alg hdl sig ctx = case sig of
-    L (Add n) -> (<$ ctx) <$> ((n +) <$> get >>= (\p -> put p >> pure p))
+    L (Add n) -> (<$ ctx) <$> ((n+) <$> get >>= (\p -> put p >> pure p))
     R other -> CounterState (alg (runCounterState . hdl) (R other) ctx)
 
 watchVal ::
