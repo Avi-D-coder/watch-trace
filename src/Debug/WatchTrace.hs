@@ -50,8 +50,8 @@ import System.Mem.Weak (Weak)
 import Unsafe.Coerce
 import Prelude
 
-class WatchDot a where
-  watchRecIO ::
+class WatchTrace a where
+  watchRec ::
     ( Has (State Watched) s m,
       Has (State Marked) s m,
       Has (Writer Thunks) s m,
@@ -62,7 +62,7 @@ class WatchDot a where
     Maybe Parent ->
     a ->
     m ()
-  default watchRecIO ::
+  default watchRec ::
     ( G.Generic a,
       GWatchRec1 (G.Rep a),
       Has (State Watched) s m,
@@ -75,8 +75,8 @@ class WatchDot a where
     Maybe Parent ->
     a ->
     m ()
-  watchRecIO (Just (pId, el)) a = undefined
-  watchRecIO Nothing a = undefined
+  watchRec (Just (pId, el)) a = undefined
+  watchRec Nothing a = undefined
 
 instance
   ( Has (State Watched) s m,
@@ -86,14 +86,14 @@ instance
     Has (Writer Bool) s m,
     Has (IsHnf) s m
   ) =>
-  WatchDot a
+  WatchTrace a
   where
   -- TODO use ghc-heap-view to show thunks and constructors
-  watchRecIO (Just (pId, el)) a = undefined
-  watchRecIO Nothing a = undefined
+  watchRec (Just (pId, el)) a = undefined
+  watchRec Nothing a = undefined
 
 class GWatchRec1 f where
-  gWatchRecIO1 :: f p -> Parent -> DataTypeName -> m ()
+  gWatchRec1 :: f p -> Parent -> DataTypeName -> m ()
 
 newtype StabName = StabName (StableName Any) deriving (Eq, G.Generic)
 
@@ -234,7 +234,7 @@ instance Has (State Int) sig m => Algebra (Counter :+: sig) (CounterState m) whe
     R other -> CounterState (alg (runCounterState . hdl) (R other) ctx)
 
 watchVal ::
-  ( WatchDot a,
+  ( WatchTrace a,
     GWatchRec1 (G.Rep a),
     Has (State Watched) s m,
     Has (State Marked) s m,
@@ -251,81 +251,81 @@ watchVal a is_pure_hnf = do
   name <- mkStab a'
   undefined
 
-watchRecIOPrim :: (WatchDot a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
-watchRecIOPrim p l a = do
+watchRecPrim :: (WatchTrace a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
+watchRecPrim p l a = do
   nf <- isHnf a
   undefined
 
 -- Instances
 
-instance {-# OVERLAPPING #-} WatchDot Bool where
-  watchRecIO p = watchRecIOPrim p "Lazy Bool"
+instance {-# OVERLAPPING #-} WatchTrace Bool where
+  watchRec p = watchRecPrim p "Lazy Bool"
 
-instance {-# OVERLAPPING #-} WatchDot Int where
-  watchRecIO p = watchRecIOPrim p "Lazy Int"
+instance {-# OVERLAPPING #-} WatchTrace Int where
+  watchRec p = watchRecPrim p "Lazy Int"
 
-instance {-# OVERLAPPING #-} WatchDot Int8 where
-  watchRecIO p = watchRecIOPrim p "Lazy Int*"
+instance {-# OVERLAPPING #-} WatchTrace Int8 where
+  watchRec p = watchRecPrim p "Lazy Int*"
 
-instance {-# OVERLAPPING #-} WatchDot Int16 where
-  watchRecIO p = watchRecIOPrim p "Lazy Int16"
+instance {-# OVERLAPPING #-} WatchTrace Int16 where
+  watchRec p = watchRecPrim p "Lazy Int16"
 
-instance {-# OVERLAPPING #-} WatchDot Int32 where
-  watchRecIO p = watchRecIOPrim p "Lazy Int32"
+instance {-# OVERLAPPING #-} WatchTrace Int32 where
+  watchRec p = watchRecPrim p "Lazy Int32"
 
-instance {-# OVERLAPPING #-} WatchDot Int64 where
-  watchRecIO p = watchRecIOPrim p "Lazy Int64"
+instance {-# OVERLAPPING #-} WatchTrace Int64 where
+  watchRec p = watchRecPrim p "Lazy Int64"
 
-instance {-# OVERLAPPING #-} WatchDot Word where
-  watchRecIO p = watchRecIOPrim p "Lazy Word"
+instance {-# OVERLAPPING #-} WatchTrace Word where
+  watchRec p = watchRecPrim p "Lazy Word"
 
-instance {-# OVERLAPPING #-} WatchDot Word8 where
-  watchRecIO p = watchRecIOPrim p "Lazy Word8"
+instance {-# OVERLAPPING #-} WatchTrace Word8 where
+  watchRec p = watchRecPrim p "Lazy Word8"
 
-instance {-# OVERLAPPING #-} WatchDot Word16 where
-  watchRecIO p = watchRecIOPrim p "Lazy Word16"
+instance {-# OVERLAPPING #-} WatchTrace Word16 where
+  watchRec p = watchRecPrim p "Lazy Word16"
 
-instance {-# OVERLAPPING #-} WatchDot Word32 where
-  watchRecIO p = watchRecIOPrim p "Lazy Word32"
+instance {-# OVERLAPPING #-} WatchTrace Word32 where
+  watchRec p = watchRecPrim p "Lazy Word32"
 
-instance {-# OVERLAPPING #-} WatchDot Word64 where
-  watchRecIO p = watchRecIOPrim p "Lazy Word64"
+instance {-# OVERLAPPING #-} WatchTrace Word64 where
+  watchRec p = watchRecPrim p "Lazy Word64"
 
-instance {-# OVERLAPPING #-} WatchDot Natural where
-  watchRecIO p = watchRecIOPrim p "Lazy Natural"
+instance {-# OVERLAPPING #-} WatchTrace Natural where
+  watchRec p = watchRecPrim p "Lazy Natural"
 
-instance {-# OVERLAPPING #-} WatchDot Integer where
-  watchRecIO p = watchRecIOPrim p "Lazy Integer"
+instance {-# OVERLAPPING #-} WatchTrace Integer where
+  watchRec p = watchRecPrim p "Lazy Integer"
 
-instance {-# OVERLAPPING #-} WatchDot Float where
-  watchRecIO p = watchRecIOPrim p "Lazy Float"
+instance {-# OVERLAPPING #-} WatchTrace Float where
+  watchRec p = watchRecPrim p "Lazy Float"
 
-instance {-# OVERLAPPING #-} WatchDot Double where
-  watchRecIO p = watchRecIOPrim p "Lazy Double"
+instance {-# OVERLAPPING #-} WatchTrace Double where
+  watchRec p = watchRecPrim p "Lazy Double"
 
 -- Generic instances
 
 instance (G.Constructor m, GWatchRec1 a) => GWatchRec1 (G.C1 m a) where
-  gWatchRecIO1 m@(G.M1 a) (pId, el) = gWatchRecIO1 a (pId, el <> EdgeLabel (G.conName m))
+  gWatchRec1 m@(G.M1 a) (pId, el) = gWatchRec1 a (pId, el <> EdgeLabel (G.conName m))
 
 instance (G.Selector m, GWatchRec1 a) => GWatchRec1 (G.S1 m a) where
-  gWatchRecIO1 m@(G.M1 a) (pId, el) = gWatchRecIO1 a (pId, el <> EdgeLabel (G.selName m))
+  gWatchRec1 m@(G.M1 a) (pId, el) = gWatchRec1 a (pId, el <> EdgeLabel (G.selName m))
 
 instance (G.Datatype m, GWatchRec1 a) => GWatchRec1 (G.D1 m a) where
-  gWatchRecIO1 d@(G.M1 a) p pd  = gWatchRecIO1 a p $ DataTypeName $ G.datatypeName d
+  gWatchRec1 d@(G.M1 a) p pd  = gWatchRec1 a p $ DataTypeName $ G.datatypeName d
 
 instance GWatchRec1 G.V1 where
-  gWatchRecIO1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
+  gWatchRec1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
 
 instance GWatchRec1 G.U1 where
-  gWatchRecIO1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
+  gWatchRec1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
 
-instance WatchDot a => GWatchRec1 (G.Rec0 a) where
-  gWatchRecIO1 (G.K1 a) p d = undefined -- watchRecIO (Just p) a
+instance WatchTrace a => GWatchRec1 (G.Rec0 a) where
+  gWatchRec1 (G.K1 a) p d = undefined -- watchRec (Just p) a
 
 instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:+: b) where
-  gWatchRecIO1 (G.L1 a) = gWatchRecIO1 a
-  gWatchRecIO1 (G.R1 a) = gWatchRecIO1 a
+  gWatchRec1 (G.L1 a) = gWatchRec1 a
+  gWatchRec1 (G.R1 a) = gWatchRec1 a
 
 instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:*: b) where
-  gWatchRecIO1 (a G.:*: b) p d = undefined -- ((gWatchRecIO1 a p (DataTypeName "")) >> (gWatchRecIO1 b p (DataTypeName "")))
+  gWatchRec1 (a G.:*: b) p d = undefined -- ((gWatchRec1 a p (DataTypeName "")) >> (gWatchRec1 b p (DataTypeName "")))
