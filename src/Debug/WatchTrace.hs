@@ -54,7 +54,7 @@ class WatchTrace a where
   watchRec ::
     ( Has (State Watched) s m,
       Has (State Marked) s m,
-      Has (Writer Thunks) s m,
+      Has (Writer AnyWatch) s m,
       Has (Writer Elem) s m,
       Has (Writer Bool) s m,
       Has IsHnf s m
@@ -67,7 +67,7 @@ class WatchTrace a where
       GWatchRec1 (G.Rep a),
       Has (State Watched) s m,
       Has (State Marked) s m,
-      Has (Writer Thunks) s m,
+      Has (Writer AnyWatch) s m,
       Has (Writer Elem) s m,
       Has (Writer Bool) s m,
       Has IsHnf s m
@@ -81,7 +81,7 @@ class WatchTrace a where
 instance
   ( Has (State Watched) s m,
     Has (State Marked) s m,
-    Has (Writer Thunks) s m,
+    Has (Writer AnyWatch) s m,
     Has (Writer Elem) s m,
     Has (Writer Bool) s m,
     Has IsHnf s m
@@ -96,7 +96,7 @@ class GWatchRec1 f where
   gWatchRec1 ::
     ( Has (State Watched) s m,
       Has (State Marked) s m,
-      Has (Writer Thunks) s m,
+      Has (Writer AnyWatch) s m,
       Has (Writer Elem) s m,
       Has (Writer Bool) s m,
       Has IsHnf s m
@@ -128,9 +128,9 @@ newtype EdgeLabel = EdgeLabel String
 
 type Parent = (ElemId, EdgeLabel)
 
-type NewNodes = IO ((Bool, Watched, Marked, Thunks, [Elem]), DataTypeName)
+type NewNodes = IO ((Bool, Watched, Marked, AnyWatch, [Elem]), DataTypeName)
 
-newtype ElemId = ElemId Int deriving (Eq, Ord, Show, G.Generic)
+type ElemId = Int
 
 data Edge = Edge ElemId EdgeLabel ElemId
   deriving (Eq, Ord, Show, G.Generic)
@@ -156,13 +156,7 @@ data AnyWatch
   = AnyWatch
       { weak_val :: Weak Any,
         pre_name :: StabName,
-        watchAny ::
-          Maybe Parent ->
-          Any ->
-          Watched ->
-          Marked ->
-          Thunks ->
-          IO (Bool, Watched, Marked, Thunks, [Elem])
+        watchAny :: Maybe Parent -> Any -> IO ()
       }
   deriving (G.Generic)
 
@@ -244,23 +238,42 @@ instance Has (State Int) sig m => Algebra (Counter :+: sig) (CounterState m) whe
     L (Add n) -> (<$ ctx) <$> ((n +) <$> get >>= (\p -> put p >> pure p))
     R other -> CounterState (alg (runCounterState . hdl) (R other) ctx)
 
-watchVal ::
+watchVal :: forall a s m.
   ( WatchTrace a,
     GWatchRec1 (G.Rep a),
     Has (State Watched) s m,
     Has (State Marked) s m,
-    Has (Writer Thunks) s m,
+    Has (Writer AnyWatch) s m,
     Has (Writer Elem) s m,
     Has (Writer Bool) s m,
-    Has MkStableName s m
+    Has MkStableName s m,
+    Has MkWeakPtr s m,
+    Has IsHnf s m,
+    Has Counter s m
   ) =>
   a ->
   Bool ->
   m ()
-watchVal a is_pure_hnf = do
+watchVal a isPure = do
+  -- Does unsafeCoerce add a thunk
   let a' :: Any = unsafeCoerce a
   name <- mkStab a'
-  undefined
+  hnf <- isHnf a
+  watched <- get @Watched
+  marked <- get @Marked
+  let isMut = fst <$> M.lookup name watched
+  if  | name `S.member` marked || isMut == Just False -> pure ()
+      | Just True == isMut -> put (S.insert name marked) >> pure ()
+      | isNothing isMut && hnf && isPure -> do
+        eId <- inc
+        put $ M.insert name (True, eId) watched
+        put $ S.insert name marked
+        pure ()
+      | otherwise -> do
+        weak <- mkWeakPtr a' Nothing
+        put $ S.insert name marked
+        tell $ AnyWatch weak name $ unsafeCoerce $ undefined (watchRec :: Maybe Parent -> a -> m ())
+        pure ()
 
 watchRecPrim :: (WatchTrace a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
 watchRecPrim p l a = do
@@ -323,16 +336,16 @@ instance (G.Selector m, GWatchRec1 a) => GWatchRec1 (G.S1 m a) where
   gWatchRec1 m@(G.M1 a) (pId, el) = gWatchRec1 a (pId, el <> EdgeLabel (G.selName m))
 
 instance (G.Datatype m, GWatchRec1 a) => GWatchRec1 (G.D1 m a) where
-  gWatchRec1 d@(G.M1 a) p pd = gWatchRec1 a p $ DataTypeName $ G.datatypeName d
+  gWatchRec1 d@(G.M1 a) p pd = gWatchRec1 a p $ pd <> DataTypeName (G.datatypeName d)
 
 instance GWatchRec1 G.V1 where
-  gWatchRec1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
+  gWatchRec1 _ _ _ = pure ()
 
 instance GWatchRec1 G.U1 where
-  gWatchRec1 _ (_, EdgeLabel l) d = undefined -- return ((False, w, m, lv, []), DataTypeName l <> " " <> vl)
+  gWatchRec1 _ _ _ = pure ()
 
 instance WatchTrace a => GWatchRec1 (G.Rec0 a) where
-  gWatchRec1 (G.K1 a) p d = watchRec (Just p) a
+  gWatchRec1 (G.K1 a) p _ = watchRec (Just p) a
 
 instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:+: b) where
   gWatchRec1 (G.L1 a) = gWatchRec1 a
@@ -340,7 +353,6 @@ instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:+: b) where
 
 instance (GWatchRec1 a, GWatchRec1 b) => GWatchRec1 (a G.:*: b) where
   gWatchRec1 (a G.:*: b) p d = gWatchRec1 a p (d <> ", ") >> gWatchRec1 b p (d <> ", ")
-
 
 instance {-# OVERLAPPING #-} WatchTrace a => WatchTrace (Maybe a)
 
