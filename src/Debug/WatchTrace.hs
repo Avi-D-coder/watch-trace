@@ -57,7 +57,10 @@ class WatchTrace a where
       Has (Writer AnyWatch) s m,
       Has (Writer Elem) s m,
       Has (Writer Bool) s m,
-      Has IsHnf s m
+      Has MkStableName s m,
+      Has MkWeakPtr s m,
+      Has IsHnf s m,
+      Has Counter s m
     ) =>
     Maybe Parent ->
     a ->
@@ -70,13 +73,28 @@ class WatchTrace a where
       Has (Writer AnyWatch) s m,
       Has (Writer Elem) s m,
       Has (Writer Bool) s m,
-      Has IsHnf s m
+      Has MkStableName s m,
+      Has MkWeakPtr s m,
+      Has IsHnf s m,
+      Has Counter s m
     ) =>
     Maybe Parent ->
     a ->
     m ()
-  watchRec (Just (pId, el)) a = undefined
-  watchRec Nothing a = undefined
+  watchRec mp a = watchVal a True >>= \case
+    Left eId -> do
+      -- TODO datatypeName
+      let dataType = ""
+      tell $ Vertex eId dataType
+      tellEdge eId
+      -- FIXME why am I passing DataTypeName?
+      gWatchRec1 (G.from a) (eId, "") dataType
+    Right eId -> tellEdge eId
+    where
+      tellEdge :: Has (Writer Elem) s m => ElemId -> m ()
+      tellEdge eId = case mp of
+        (Just (pId, el)) -> tell $ E $ Edge pId el eId
+        _ -> pure ()
 
 instance
   ( Has (State Watched) s m,
@@ -89,8 +107,7 @@ instance
   WatchTrace a
   where
   -- TODO use ghc-heap-view to show thunks and constructors
-  watchRec (Just (pId, el)) a = undefined
-  watchRec Nothing a = undefined
+  watchRec mp a = undefined
 
 class GWatchRec1 f where
   gWatchRec1 ::
@@ -99,7 +116,10 @@ class GWatchRec1 f where
       Has (Writer AnyWatch) s m,
       Has (Writer Elem) s m,
       Has (Writer Bool) s m,
-      Has IsHnf s m
+      Has MkStableName s m,
+      Has MkWeakPtr s m,
+      Has IsHnf s m,
+      Has Counter s m
     ) =>
     f p ->
     Parent ->
@@ -127,8 +147,6 @@ newtype EdgeLabel = EdgeLabel String
   deriving (Eq, Ord, Show, Semigroup, Monoid, IsString, G.Generic)
 
 type Parent = (ElemId, EdgeLabel)
-
-type NewNodes = IO ((Bool, Watched, Marked, AnyWatch, [Elem]), DataTypeName)
 
 type ElemId = Int
 
@@ -238,7 +256,9 @@ instance Has (State Int) sig m => Algebra (Counter :+: sig) (CounterState m) whe
     L (Add n) -> (<$ ctx) <$> ((n +) <$> get >>= (\p -> put p >> pure p))
     R other -> CounterState (alg (runCounterState . hdl) (R other) ctx)
 
-watchVal :: forall a s m.
+-- Returns Left when the value is new, Right when value is cached and pure.
+watchVal ::
+  forall a s m.
   ( WatchTrace a,
     GWatchRec1 (G.Rep a),
     Has (State Watched) s m,
@@ -253,7 +273,7 @@ watchVal :: forall a s m.
   ) =>
   a ->
   Bool ->
-  m ()
+  m (Either ElemId ElemId)
 watchVal a isPure = do
   -- Does unsafeCoerce add a thunk
   let a' :: Any = unsafeCoerce a
@@ -261,71 +281,92 @@ watchVal a isPure = do
   hnf <- isHnf a
   watched <- get @Watched
   marked <- get @Marked
-  let isMut = fst <$> M.lookup name watched
-  if  | name `S.member` marked || isMut == Just False -> pure ()
-      | Just True == isMut -> put (S.insert name marked) >> pure ()
+  let wa = M.lookup name watched
+      isMut = fst <$> wa
+      hasId = snd <$> wa
+  if  | name `S.member` marked || isMut == Just False -> pure $ Right $ fromJust hasId
+      | Just True == isMut -> put (S.insert name marked) >> pure (Right $ fromJust hasId)
       | isNothing isMut && hnf && isPure -> do
         eId <- inc
         put $ M.insert name (True, eId) watched
         put $ S.insert name marked
-        pure ()
+        pure $ Left eId
       | otherwise -> do
+        eId <- inc
         weak <- mkWeakPtr a' Nothing
         put $ S.insert name marked
-        tell $ AnyWatch weak name $ unsafeCoerce $ undefined (watchRec :: Maybe Parent -> a -> m ())
-        pure ()
+        put $ M.insert name (False, eId) watched
+        -- Is there a way to mention watchRec without making watchVal require the full context
+        tell $ AnyWatch weak name watchRecAnyIO
+        pure $ Left eId
+  where
 
-watchRecPrim :: (WatchTrace a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
-watchRecPrim p l a = do
-  nf <- isHnf a
-  undefined
+    watchRecAnyIO :: Maybe Parent -> Any -> IO ()
+    watchRecAnyIO =  unsafeCoerce watchRecIO
+    watchRecIO :: Maybe Parent -> a -> IO ()
+    watchRecIO = runM . undefined (watchRec :: Maybe Parent -> a -> m ())
+
+watchPrim :: (WatchTrace a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
+watchPrim mp l a = undefined
+  -- watchVal a True >>= \case
+  --   Left eId -> do
+  --     -- FIXME should be nf not hnf
+  --     nf <- isHnf a
+  --     tell $ Vertex eId $ "Lazy" <> DataTypeName l
+  --     tellEdge eId
+  --   Right eId -> tellEdge eId
+  --   where
+  --     tellEdge :: Has (Writer Elem) s m => ElemId -> m ()
+  --     tellEdge eId = case mp of
+  --       (Just (pId, el)) -> tell $ E $ Edge pId el eId
+  --       _ -> pure ()
 
 -- Instances
 
 instance {-# OVERLAPPING #-} WatchTrace Bool where
-  watchRec p = watchRecPrim p "Lazy Bool"
+  watchRec p = watchPrim p "Lazy Bool"
 
 instance {-# OVERLAPPING #-} WatchTrace Int where
-  watchRec p = watchRecPrim p "Lazy Int"
+  watchRec p = watchPrim p "Lazy Int"
 
 instance {-# OVERLAPPING #-} WatchTrace Int8 where
-  watchRec p = watchRecPrim p "Lazy Int*"
+  watchRec p = watchPrim p "Lazy Int*"
 
 instance {-# OVERLAPPING #-} WatchTrace Int16 where
-  watchRec p = watchRecPrim p "Lazy Int16"
+  watchRec p = watchPrim p "Lazy Int16"
 
 instance {-# OVERLAPPING #-} WatchTrace Int32 where
-  watchRec p = watchRecPrim p "Lazy Int32"
+  watchRec p = watchPrim p "Lazy Int32"
 
 instance {-# OVERLAPPING #-} WatchTrace Int64 where
-  watchRec p = watchRecPrim p "Lazy Int64"
+  watchRec p = watchPrim p "Lazy Int64"
 
 instance {-# OVERLAPPING #-} WatchTrace Word where
-  watchRec p = watchRecPrim p "Lazy Word"
+  watchRec p = watchPrim p "Lazy Word"
 
 instance {-# OVERLAPPING #-} WatchTrace Word8 where
-  watchRec p = watchRecPrim p "Lazy Word8"
+  watchRec p = watchPrim p "Lazy Word8"
 
 instance {-# OVERLAPPING #-} WatchTrace Word16 where
-  watchRec p = watchRecPrim p "Lazy Word16"
+  watchRec p = watchPrim p "Lazy Word16"
 
 instance {-# OVERLAPPING #-} WatchTrace Word32 where
-  watchRec p = watchRecPrim p "Lazy Word32"
+  watchRec p = watchPrim p "Lazy Word32"
 
 instance {-# OVERLAPPING #-} WatchTrace Word64 where
-  watchRec p = watchRecPrim p "Lazy Word64"
+  watchRec p = watchPrim p "Lazy Word64"
 
 instance {-# OVERLAPPING #-} WatchTrace Natural where
-  watchRec p = watchRecPrim p "Lazy Natural"
+  watchRec p = watchPrim p "Lazy Natural"
 
 instance {-# OVERLAPPING #-} WatchTrace Integer where
-  watchRec p = watchRecPrim p "Lazy Integer"
+  watchRec p = watchPrim p "Lazy Integer"
 
 instance {-# OVERLAPPING #-} WatchTrace Float where
-  watchRec p = watchRecPrim p "Lazy Float"
+  watchRec p = watchPrim p "Lazy Float"
 
 instance {-# OVERLAPPING #-} WatchTrace Double where
-  watchRec p = watchRecPrim p "Lazy Double"
+  watchRec p = watchPrim p "Lazy Double"
 
 -- Generic instances
 
