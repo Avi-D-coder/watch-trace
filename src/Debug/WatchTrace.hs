@@ -25,6 +25,7 @@ import Control.Algebra
 import Control.Carrier.Lift
 import Control.Carrier.Reader
 import Control.Carrier.State.Strict
+import Control.Carrier.Writer.Strict
 import Control.Concurrent.MVar
 import Control.Effect.Writer
 import Control.Exception
@@ -54,9 +55,8 @@ class WatchTrace a where
   watchRec ::
     ( Has (State Watched) s m,
       Has (State Marked) s m,
-      Has (Writer AnyWatch) s m,
-      Has (Writer Elem) s m,
-      Has (Writer Bool) s m,
+      Has (Writer [AnyWatch]) s m,
+      Has (Writer [Elem]) s m,
       Has MkStableName s m,
       Has MkWeakPtr s m,
       Has IsHnf s m,
@@ -70,9 +70,8 @@ class WatchTrace a where
       GWatchRec1 (G.Rep a),
       Has (State Watched) s m,
       Has (State Marked) s m,
-      Has (Writer AnyWatch) s m,
-      Has (Writer Elem) s m,
-      Has (Writer Bool) s m,
+      Has (Writer [AnyWatch]) s m,
+      Has (Writer [Elem]) s m,
       Has MkStableName s m,
       Has MkWeakPtr s m,
       Has IsHnf s m,
@@ -85,23 +84,22 @@ class WatchTrace a where
     Left eId -> do
       -- TODO datatypeName
       let dataType = ""
-      tell $ Vertex eId dataType
+      tell @[Elem] [Vertex eId dataType]
       tellEdge eId
       -- FIXME why am I passing DataTypeName?
       gWatchRec1 (G.from a) (eId, "") dataType
     Right eId -> tellEdge eId
     where
-      tellEdge :: Has (Writer Elem) s m => ElemId -> m ()
+      tellEdge :: Has (Writer [Elem]) s m => ElemId -> m ()
       tellEdge eId = case mp of
-        (Just (pId, el)) -> tell $ E $ Edge pId el eId
+        (Just (pId, el)) -> tell [E $ Edge pId el eId]
         _ -> pure ()
 
 instance
   ( Has (State Watched) s m,
     Has (State Marked) s m,
-    Has (Writer AnyWatch) s m,
-    Has (Writer Elem) s m,
-    Has (Writer Bool) s m,
+    Has (Writer [AnyWatch]) s m,
+    Has (Writer [Elem]) s m,
     Has IsHnf s m
   ) =>
   WatchTrace a
@@ -113,9 +111,8 @@ class GWatchRec1 f where
   gWatchRec1 ::
     ( Has (State Watched) s m,
       Has (State Marked) s m,
-      Has (Writer AnyWatch) s m,
-      Has (Writer Elem) s m,
-      Has (Writer Bool) s m,
+      Has (Writer [AnyWatch]) s m,
+      Has (Writer [Elem]) s m,
       Has MkStableName s m,
       Has MkWeakPtr s m,
       Has IsHnf s m,
@@ -174,7 +171,13 @@ data AnyWatch
   = AnyWatch
       { weak_val :: Weak Any,
         pre_name :: StabName,
-        watchAny :: Maybe Parent -> Any -> IO ()
+        watchAny ::
+          Int ->
+          Watched ->
+          Marked ->
+          Maybe Parent ->
+          Any ->
+          IO ([Elem], ([AnyWatch], (Int, (Watched, (Marked, ())))))
       }
   deriving (G.Generic)
 
@@ -231,13 +234,17 @@ add = send . Add
 inc :: Has Counter s m => m Int
 inc = send $ Add 1
 
-newtype CounterState m a = CounterState {runCounterState :: m a}
+newtype CounterStateC m a = CounterStateC {runCounterStateC :: StateC Int m a}
   deriving (Applicative, Functor, Monad, MonadFail, MonadIO)
 
-instance Has (State Int) sig m => Algebra (Counter :+: sig) (CounterState m) where
+instance Algebra sig m => Algebra (Counter :+: sig) (CounterStateC m) where
   alg hdl sig ctx = case sig of
-    L (Add n) -> (<$ ctx) <$> ((n +) <$> get >>= (\p -> put p >> pure p))
-    R other -> CounterState (alg (runCounterState . hdl) other ctx)
+    L (Add n) -> CounterStateC (modify (n +)) >> CounterStateC (gets (<$ ctx))
+    R other -> CounterStateC (alg (runCounterStateC . hdl) (R other) ctx)
+
+runCounterState :: Int -> CounterStateC m a -> m (Int, a)
+runCounterState i = runState i . runCounterStateC
+{-# INLINE runCounterState #-}
 
 -- Returns Left when the value is new, Right when value is cached and pure.
 watchVal ::
@@ -246,9 +253,8 @@ watchVal ::
     GWatchRec1 (G.Rep a),
     Has (State Watched) s m,
     Has (State Marked) s m,
-    Has (Writer AnyWatch) s m,
-    Has (Writer Elem) s m,
-    Has (Writer Bool) s m,
+    Has (Writer [AnyWatch]) s m,
+    Has (Writer [Elem]) s m,
     Has MkStableName s m,
     Has MkWeakPtr s m,
     Has IsHnf s m,
@@ -279,30 +285,42 @@ watchVal a isPure = do
         weak <- mkWeakPtr a' Nothing
         put $ S.insert name marked
         put $ M.insert name (False, eId) watched
-        -- Is there a way to mention watchRec without making watchVal require the full context
-        tell $ AnyWatch weak name watchRecAnyIO
+        tell
+          [ AnyWatch weak name $
+              unsafeCoerce
+                ( watchRecIO ::
+                    Int ->
+                    Watched ->
+                    Marked ->
+                    Maybe Parent ->
+                    a ->
+                    IO ([Elem], ([AnyWatch], (Int, (Watched, (Marked, ())))))
+                )
+          ]
         pure $ Left eId
-  where
 
-    watchRecAnyIO :: Maybe Parent -> Any -> IO ()
-    watchRecAnyIO =  unsafeCoerce watchRecIO
-    watchRecIO :: Maybe Parent -> a -> IO ()
-    watchRecIO = runM . undefined (watchRec :: Maybe Parent -> a -> m ())
+watchRecIO ::
+  (WatchTrace a) =>
+  Int ->
+  Watched ->
+  Marked ->
+  Maybe Parent ->
+  a ->
+  IO ([Elem], ([AnyWatch], (Int, (Watched, (Marked, ())))))
+watchRecIO count watched marked mp a =
+  runM
+    . runMkStableNameIO
+    . runMkWeakPtrIO
+    . runIsHnfIO
+    . runWriter
+    . runWriter
+    . runCounterState count
+    . runState watched
+    . runState marked
+    $ watchRec mp a
 
 watchPrim :: (WatchTrace a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
 watchPrim mp l a = undefined
-  -- watchVal a True >>= \case
-  --   Left eId -> do
-  --     -- FIXME should be nf not hnf
-  --     nf <- isHnf a
-  --     tell $ Vertex eId $ "Lazy" <> DataTypeName l
-  --     tellEdge eId
-  --   Right eId -> tellEdge eId
-  --   where
-  --     tellEdge :: Has (Writer Elem) s m => ElemId -> m ()
-  --     tellEdge eId = case mp of
-  --       (Just (pId, el)) -> tell $ E $ Edge pId el eId
-  --       _ -> pure ()
 
 -- Instances
 
