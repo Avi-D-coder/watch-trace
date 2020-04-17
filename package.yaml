@@ -1,7 +1,7 @@
 name:                watch-trace
 version:             0.1.0.0
 github:              "Avi-D-coder/watch-trace"
-license:             BSD3
+license:             OtherLicense
 author:              "Avi Dessauer"
 maintainer:          "avi.the.coder@gmail.com"
 copyright:           "2020"

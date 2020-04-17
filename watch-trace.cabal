@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ff8d57ed85ee316fc65efa09e1b9d753df6daec5981be45780278f904b325239
+-- hash: 5600a8541c52718bf3059f23bcf8d77f16f581d973eb6abb233238aaa01df262
 
 name:           watch-trace
 version:        0.1.0.0
@@ -14,7 +14,7 @@ bug-reports:    https://github.com/Avi-D-coder/watch-trace/issues
 author:         Avi Dessauer
 maintainer:     avi.the.coder@gmail.com
 copyright:      2020
-license:        BSD3
+license:        OtherLicense
 build-type:     Simple
 extra-source-files:
     README.md
