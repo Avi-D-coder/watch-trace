@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.2.
+-- This file has been generated from package.yaml by hpack version 0.33.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 76c011c71a69a224ad58ecf58eb6285d00ed218857e134ddea266e9912d7c229
+-- hash: ff8d57ed85ee316fc65efa09e1b9d753df6daec5981be45780278f904b325239
 
 name:           watch-trace
 version:        0.1.0.0
@@ -31,7 +31,7 @@ library
       Paths_watch_trace
   hs-source-dirs:
       src
-  ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing
+  ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -fwarn-redundant-constraints
   build-depends:
       base >=4.7 && <5
     , fgl >=5
@@ -48,7 +48,7 @@ executable watch-trace-exe
       Paths_watch_trace
   hs-source-dirs:
       app
-  ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -fwarn-redundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
     , fgl >=5
@@ -67,7 +67,7 @@ test-suite watch-trace-test
       Paths_watch_trace
   hs-source-dirs:
       test
-  ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -fwarn-redundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
     , fgl >=5

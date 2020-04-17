@@ -39,6 +39,7 @@ ghc-options:
 - -fno-warn-unused-imports
 - -fno-warn-unused-binds
 - -fno-warn-name-shadowing
+- -fwarn-redundant-constraints
 
 library:
   source-dirs: src

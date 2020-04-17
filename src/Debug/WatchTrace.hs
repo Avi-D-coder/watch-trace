@@ -250,11 +250,9 @@ runCounterState i = runState i . runCounterStateC
 watchVal ::
   forall a s m.
   ( WatchTrace a,
-    GWatchRec1 (G.Rep a),
     Has (State Watched) s m,
     Has (State Marked) s m,
     Has (Writer [AnyWatch]) s m,
-    Has (Writer [Elem]) s m,
     Has MkStableName s m,
     Has MkWeakPtr s m,
     Has IsHnf s m,
