@@ -91,7 +91,7 @@ class WatchTrace a where
     where
       tellEdge :: Has (Writer [Elem]) s m => ElemId -> m ()
       tellEdge eId = case mp of
-        (Just (pId, el)) -> tell [E $ Edge pId el eId]
+        (Just (pId, el)) -> tell [Edge pId el eId]
         _ -> pure ()
 
 instance
@@ -146,12 +146,9 @@ type Parent = (ElemId, EdgeLabel)
 
 type ElemId = Int
 
-data Edge = Edge ElemId EdgeLabel ElemId
-  deriving (Eq, Ord, Show, G.Generic)
-
 data Elem
   = Vertex ElemId DataTypeName
-  | E Edge
+  | Edge ElemId EdgeLabel ElemId
   deriving (Eq, Ord, Show, G.Generic)
 
 data ElemQuery
@@ -364,7 +361,7 @@ watchPrim ::
 watchPrim mp l a = do
   wv <- watchVal a True
   let eId = fromEither wv
-  whenJust mp $ \(pId, el) -> tell [E $ Edge pId el eId]
+  whenJust mp $ \(pId, el) -> tell [Edge pId el eId]
   when (isLeft wv) $ do
     nf <- isHnf a
     let l' = if nf then DataTypeName $ show a else DataTypeName l
