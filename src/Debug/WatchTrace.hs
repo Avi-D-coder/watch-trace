@@ -12,9 +12,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -31,6 +29,7 @@ import Control.Effect.Writer
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Either
 import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
 import Data.Hashable
@@ -246,7 +245,7 @@ runCounterState :: Int -> CounterStateC m a -> m (Int, a)
 runCounterState i = runState i . runCounterStateC
 {-# INLINE runCounterState #-}
 
--- Returns Left when the value is new, Right when value is cached and pure.
+-- | Returns Left when the value is new, Right when value is cached and pure.
 watchVal ::
   forall a s m.
   ( WatchTrace a,
@@ -317,8 +316,38 @@ watchRecIO count watched marked mp a =
     . runState marked
     $ watchRec mp a
 
-watchPrim :: (WatchTrace a, Show a, Has IsHnf s m) => Maybe Parent -> String -> a -> m ()
-watchPrim mp l a = undefined
+watchPrim ::
+  ( WatchTrace a,
+    Show a,
+    Has (State Watched) s m,
+    Has (State Marked) s m,
+    Has (Writer [AnyWatch]) s m,
+    Has (Writer [Elem]) s m,
+    Has MkStableName s m,
+    Has MkWeakPtr s m,
+    Has IsHnf s m,
+    Has Counter s m
+  ) =>
+  Maybe Parent ->
+  String ->
+  a ->
+  m ()
+watchPrim mp l a = do
+  wv <- watchVal a True
+  let eId = fromEither wv
+  whenJust mp $ \(pId, el) -> tell [E $ Edge pId el eId]
+  when (isLeft wv) $ do
+    nf <- isHnf a
+    let l' = if nf then DataTypeName $ show a else DataTypeName l
+    tell @[Elem] [Vertex eId l']
+
+fromEither :: Either a a -> a
+fromEither (Left a) = a
+fromEither (Right a) = a
+
+whenJust :: Applicative f => Maybe a -> (a -> f ()) -> f ()
+whenJust (Just a) f = f a
+whenJust _ _ = pure ()
 
 -- Instances
 
