@@ -255,6 +255,9 @@ watchTraceGlobalState = unsafePerformIO $ newMVar (0, M.empty, [])
 watchTrace :: WatchTrace a => a -> b -> b
 watchTrace a b = unsafeDupablePerformIO $ watchTraceIO a >> pure b
 
+watchTraceId :: WatchTrace a => a -> a
+watchTraceId a = unsafeDupablePerformIO $ watchTraceIO a >> pure a
+
 watchTraceIO :: WatchTrace a => a -> IO ()
 watchTraceIO a =
   writeElemsToFile
