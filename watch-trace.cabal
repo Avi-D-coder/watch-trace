@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5600a8541c52718bf3059f23bcf8d77f16f581d973eb6abb233238aaa01df262
+-- hash: 648e29472a75842531ae8a925391d77def192968a3c56d316d4362b4def9adb6
 
 name:           watch-trace
 version:        0.1.0.0
@@ -33,12 +33,13 @@ library
       src
   ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -fwarn-redundant-constraints
   build-depends:
-      base >=4.7 && <5
+      aeson
+    , base >=4.7 && <5
+    , bytestring
     , fgl >=5
     , fused-effects
     , ghc-heap-view >=0.6
     , hashable
-    , text
     , unordered-containers
   default-language: Haskell2010
 
@@ -50,12 +51,13 @@ executable watch-trace-exe
       app
   ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -fwarn-redundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      aeson
+    , base >=4.7 && <5
+    , bytestring
     , fgl >=5
     , fused-effects
     , ghc-heap-view >=0.6
     , hashable
-    , text
     , unordered-containers
     , watch-trace
   default-language: Haskell2010
@@ -69,12 +71,13 @@ test-suite watch-trace-test
       test
   ghc-options: -O2 -flate-specialise -fexpose-all-unfoldings -fspecialize-aggressively -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns -fno-warn-unused-imports -fno-warn-unused-binds -fno-warn-name-shadowing -fwarn-redundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      aeson
+    , base >=4.7 && <5
+    , bytestring
     , fgl >=5
     , fused-effects
     , ghc-heap-view >=0.6
     , hashable
-    , text
     , unordered-containers
     , watch-trace
   default-language: Haskell2010

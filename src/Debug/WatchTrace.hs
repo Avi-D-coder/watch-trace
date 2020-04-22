@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
@@ -6,6 +7,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -29,6 +31,7 @@ import Control.Effect.Writer
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Aeson
 import Data.Either
 import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
@@ -37,7 +40,6 @@ import Data.IORef
 import Data.Int
 import Data.Kind
 import Data.Maybe
-import qualified Data.Text as T
 import Data.Word
 import GHC.AssertNF
 import GHC.Exts
@@ -135,10 +137,10 @@ type Thunks = [AnyWatch]
 type Marked = S.HashSet StabName
 
 newtype DataTypeName = DataTypeName String
-  deriving (Eq, Ord, Show, Semigroup, Monoid, IsString, G.Generic)
+  deriving newtype (Eq, Ord, Show, Semigroup, Monoid, IsString, G.Generic, ToJSON, FromJSON)
 
 newtype EdgeLabel = EdgeLabel String
-  deriving (Eq, Ord, Show, Semigroup, Monoid, IsString, G.Generic)
+  deriving newtype (Eq, Ord, Show, Semigroup, Monoid, IsString, G.Generic, ToJSON, FromJSON)
 
 type Parent = (ElemId, EdgeLabel)
 
@@ -147,19 +149,7 @@ type ElemId = Int
 data Elem
   = Vertex ElemId DataTypeName
   | Edge ElemId EdgeLabel ElemId
-  deriving (Eq, Ord, Show, G.Generic)
-
-data ElemQuery
-  = Ver ElemId
-  | Edg ElemId ElemId
-  | Edgs ElemId
-  deriving (Eq, Ord, Show, G.Generic)
-
-data Update
-  = New Elem
-  | Change ElemId Elem
-  | Delete ElemId
-  deriving (Eq, Ord, Show, G.Generic)
+  deriving (Eq, Ord, Show, G.Generic, ToJSON, FromJSON)
 
 data AnyWatch
   = AnyWatch
@@ -183,7 +173,7 @@ mkStab :: Has MkStableName s m => Any -> m StabName
 mkStab = send . MkStab
 
 newtype MkStableNameIOC m a = MkStableNameIOC {runMkStableNameIO :: m a}
-  deriving (Applicative, Functor, Monad, MonadIO)
+  deriving newtype (Applicative, Functor, Monad, MonadIO)
 
 instance (MonadIO m, Algebra sig m) => Algebra (MkStableName :+: sig) (MkStableNameIOC m) where
   alg hdl sig ctx = case sig of
@@ -197,7 +187,7 @@ mkWeakPtr :: Has MkWeakPtr s m => a -> Maybe (IO ()) -> m (Weak a)
 mkWeakPtr a f = send (MkWeakPtr a f)
 
 newtype MkWeakPtrIOC m a = MkWeakPtrIOC {runMkWeakPtrIO :: m a}
-  deriving (Applicative, Functor, Monad, MonadIO)
+  deriving newtype (Applicative, Functor, Monad, MonadIO)
 
 instance (MonadIO m, Algebra sig m) => Algebra (MkWeakPtr :+: sig) (MkWeakPtrIOC m) where
   alg hdl sig ctx = case sig of
@@ -208,7 +198,7 @@ data IsHnf (m :: Type -> Type) k where
   IsHnf :: a -> IsHnf m Bool
 
 newtype IsHnfIOC m a = IsHnfIOC {runIsHnfIO :: m a}
-  deriving (Applicative, Functor, Monad, MonadIO)
+  deriving newtype (Applicative, Functor, Monad, MonadIO)
 
 isHnf :: Has IsHnf s m => a -> m Bool
 isHnf = send . IsHnf
@@ -229,7 +219,7 @@ inc :: Has Counter s m => m Int
 inc = send $ Add 1
 
 newtype CounterStateC m a = CounterStateC {runCounterStateC :: StateC Int m a}
-  deriving (Applicative, Functor, Monad, MonadFail, MonadIO)
+  deriving newtype (Applicative, Functor, Monad, MonadFail, MonadIO)
 
 instance Algebra sig m => Algebra (Counter :+: sig) (CounterStateC m) where
   alg hdl sig ctx = case sig of
