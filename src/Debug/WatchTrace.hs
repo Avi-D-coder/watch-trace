@@ -176,7 +176,7 @@ data AnyWatch
           Marked ->
           Maybe Parent ->
           Any ->
-          IO ([Elem], ([AnyWatch], (Int, (Watched, (Marked, ())))))
+          IO ([Elem], [AnyWatch], Int, Watched, Marked)
       }
   deriving (G.Generic)
 
@@ -245,6 +245,29 @@ runCounterState :: Int -> CounterStateC m a -> m (Int, a)
 runCounterState i = runState i . runCounterStateC
 {-# INLINE runCounterState #-}
 
+-- State
+
+{-# NOINLINE watchTraceGlobalState #-}
+watchTraceGlobalState :: MVar (ElemId, M.HashMap k v, [a])
+watchTraceGlobalState = unsafePerformIO $ newMVar (0, M.empty, [])
+
+-- Functions
+watchTrace :: WatchTrace a => a -> b -> b
+watchTrace a b = unsafeDupablePerformIO $ watchTraceIO a >> pure b
+
+watchTraceIO :: WatchTrace a => a -> IO ()
+watchTraceIO a =
+  writeElemsToFile
+    =<< modifyMVar
+      watchTraceGlobalState
+      ( \(counter, watched, thunks) -> do
+          (e, t, c, w, _) <- watchRecIO counter watched S.empty Nothing a
+          pure ((c, w, t <> thunks), e)
+      )
+
+writeElemsToFile :: [Elem] -> IO ()
+writeElemsToFile = undefined
+
 -- | Returns Left when the value is new, Right when value is cached and pure.
 watchVal ::
   forall a s m.
@@ -291,7 +314,7 @@ watchVal a isPure = do
                     Marked ->
                     Maybe Parent ->
                     a ->
-                    IO ([Elem], ([AnyWatch], (Int, (Watched, (Marked, ())))))
+                    IO ([Elem], [AnyWatch], Int, Watched, Marked)
                 )
           ]
         pure $ Left eId
@@ -303,18 +326,21 @@ watchRecIO ::
   Marked ->
   Maybe Parent ->
   a ->
-  IO ([Elem], ([AnyWatch], (Int, (Watched, (Marked, ())))))
+  IO ([Elem], [AnyWatch], Int, Watched, Marked)
 watchRecIO count watched marked mp a =
-  runM
-    . runMkStableNameIO
-    . runMkWeakPtrIO
-    . runIsHnfIO
-    . runWriter
-    . runWriter
-    . runCounterState count
-    . runState watched
-    . runState marked
+  fmap f
+    $ runM
+      . runMkStableNameIO
+      . runMkWeakPtrIO
+      . runIsHnfIO
+      . runWriter
+      . runWriter
+      . runCounterState count
+      . runState watched
+      . runState marked
     $ watchRec mp a
+  where
+    f (e, (t, (c, (w, (m, ()))))) = (e, t, c, w, m)
 
 watchPrim ::
   ( WatchTrace a,
