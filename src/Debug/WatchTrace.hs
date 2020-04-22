@@ -90,9 +90,7 @@ class WatchTrace a where
     Right eId -> tellEdge eId
     where
       tellEdge :: Has (Writer [Elem]) s m => ElemId -> m ()
-      tellEdge eId = case mp of
-        (Just (pId, el)) -> tell [Edge pId el eId]
-        _ -> pure ()
+      tellEdge eId = whenJust mp $ \(pId, el) -> tell [Edge pId el eId]
 
 instance
   ( Has (State Watched) s m,
