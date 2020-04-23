@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 648e29472a75842531ae8a925391d77def192968a3c56d316d4362b4def9adb6
+-- hash: 64c20a9c9f44ac07c58d7ac097add40de7b72519cf4b4bf3b842ea811386c1da
 
 name:           watch-trace
 version:        0.1.0.0
@@ -36,10 +36,10 @@ library
       aeson
     , base >=4.7 && <5
     , bytestring
-    , fgl >=5
     , fused-effects
     , ghc-heap-view >=0.6
     , hashable
+    , time
     , unordered-containers
   default-language: Haskell2010
 
@@ -54,10 +54,10 @@ executable watch-trace-exe
       aeson
     , base >=4.7 && <5
     , bytestring
-    , fgl >=5
     , fused-effects
     , ghc-heap-view >=0.6
     , hashable
+    , time
     , unordered-containers
     , watch-trace
   default-language: Haskell2010
@@ -74,10 +74,10 @@ test-suite watch-trace-test
       aeson
     , base >=4.7 && <5
     , bytestring
-    , fgl >=5
     , fused-effects
     , ghc-heap-view >=0.6
     , hashable
+    , time
     , unordered-containers
     , watch-trace
   default-language: Haskell2010

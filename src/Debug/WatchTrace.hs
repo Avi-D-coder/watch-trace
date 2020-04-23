@@ -1,13 +1,13 @@
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -32,6 +32,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
+import Data.ByteString.Builder
 import Data.Either
 import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
@@ -40,11 +41,14 @@ import Data.IORef
 import Data.Int
 import Data.Kind
 import Data.Maybe
+import Data.Time.Clock
+import Data.Time.Format.ISO8601
 import Data.Word
 import GHC.AssertNF
 import GHC.Exts
 import qualified GHC.Generics as G
 import Numeric.Natural
+import System.IO (Handle, IOMode (..), openFile)
 import System.IO.Unsafe
 import System.Mem.StableName
 import qualified System.Mem.Weak as W
@@ -233,28 +237,34 @@ runCounterState i = runState i . runCounterStateC
 -- State
 
 {-# NOINLINE watchTraceGlobalState #-}
-watchTraceGlobalState :: MVar (ElemId, M.HashMap k v, [a])
-watchTraceGlobalState = unsafePerformIO $ newMVar (0, M.empty, [])
+watchTraceGlobalState :: MVar (Handle, ElemId, M.HashMap k v, [a])
+watchTraceGlobalState = unsafePerformIO $ do
+  t <- iso8601Show <$> getCurrentTime
+  h <- openFile ("watch-trace-" <> t) WriteMode
+  newMVar (h, 0, M.empty, [])
 
 -- Functions
 watchTrace :: WatchTrace a => a -> b -> b
-watchTrace a b = unsafeDupablePerformIO $ watchTraceIO a >> pure b
+watchTrace a b = unsafePerformIO $ watchTraceIO a >> pure b
 
 watchTraceId :: WatchTrace a => a -> a
-watchTraceId a = unsafeDupablePerformIO $ watchTraceIO a >> pure a
+watchTraceId a = unsafePerformIO $ watchTraceIO a >> pure a
 
 watchTraceIO :: WatchTrace a => a -> IO ()
 watchTraceIO a =
-  writeElemsToFile
-    =<< modifyMVar
-      watchTraceGlobalState
-      ( \(counter, watched, thunks) -> do
-          (e, t, c, w, _) <- watchRecIO counter watched S.empty Nothing a
-          pure ((c, w, t <> thunks), e)
-      )
+  modifyMVar_
+    watchTraceGlobalState
+    ( \(h, counter, watched, thunks) -> do
+        (e, t, c, w, _) <- watchRecIO counter watched S.empty Nothing a
+        writeElemsToFile h e
+        pure (h, c, w, t <> thunks)
+    )
 
-writeElemsToFile :: [Elem] -> IO ()
-writeElemsToFile = undefined
+writeElemsToFile :: Handle -> [Elem] -> IO ()
+writeElemsToFile h = hPutBuilder h . encodeLines
+
+encodeLines :: ToJSON a => [a] -> Builder
+encodeLines = mconcat . map ((char8 '\n' <>) . lazyByteString . encode)
 
 -- | Returns Left when the value is new, Right when value is cached and pure.
 watchVal ::

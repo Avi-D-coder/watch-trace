@@ -22,7 +22,7 @@ description:         Please see the README on GitHub at <https://github.com/Avi-
 dependencies:
 - base >= 4.7 && < 5
 - ghc-heap-view >= 0.6
-- fgl >= 5
+- time
 - bytestring
 - aeson
 - unordered-containers
