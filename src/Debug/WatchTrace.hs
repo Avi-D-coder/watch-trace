@@ -14,6 +14,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -26,6 +27,7 @@ import Control.Carrier.Lift
 import Control.Carrier.Reader
 import Control.Carrier.State.Strict
 import Control.Carrier.Writer.Strict
+import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
 import Control.Effect.Writer
 import Control.Exception
@@ -155,10 +157,17 @@ data Elem
   | Edge ElemId EdgeLabel ElemId
   deriving (Eq, Ord, Show, G.Generic, ToJSON, FromJSON)
 
+data Update
+  = Update Elem
+  | Delete ElemId
+  deriving (Eq, Ord, Show, G.Generic, ToJSON, FromJSON)
+
 data AnyWatch
   = AnyWatch
       { weak_val :: Weak Any,
         pre_name :: StabName,
+        elemId :: ElemId,
+        mut :: !Bool,
         watchAny ::
           Int ->
           Watched ->
@@ -241,7 +250,24 @@ watchTraceGlobalState :: MVar (Handle, ElemId, M.HashMap k v, [a])
 watchTraceGlobalState = unsafePerformIO $ do
   t <- iso8601Show <$> getCurrentTime
   h <- openFile ("watch-trace-" <> t) WriteMode
+  void $ forkIO periodicallyUpdateThunks
   newMVar (h, 0, M.empty, [])
+
+periodicallyUpdateThunks :: IO ()
+periodicallyUpdateThunks = modifyMVar_ watchTraceGlobalState $ \(h, counter, watched, thunks) -> do
+  pure undefined
+
+updateThunks counter watched = foldM up ([], [])
+  where
+    up :: ([AnyWatch], [Update]) -> AnyWatch -> IO ([AnyWatch], [Update])
+    up (xs, upElms) (a@AnyWatch {..}) = W.deRefWeak weak_val >>= \case
+      Nothing -> del
+      Just v -> do
+        -- Uses the effect in case mkStab becomes non trivial
+        sn <- runM . runMkStableNameIO $ mkStab v
+        if sn /= pre_name then del else undefined
+      where
+        del = pure (xs, Delete elemId : upElms)
 
 -- Functions
 watchTrace :: WatchTrace a => a -> b -> b
@@ -256,11 +282,11 @@ watchTraceIO a =
     watchTraceGlobalState
     ( \(h, counter, watched, thunks) -> do
         (e, t, c, w, _) <- watchRecIO counter watched S.empty Nothing a
-        writeElemsToFile h e
+        writeElemsToFile h $ map Update e
         pure (h, c, w, t <> thunks)
     )
 
-writeElemsToFile :: Handle -> [Elem] -> IO ()
+writeElemsToFile :: Handle -> [Update] -> IO ()
 writeElemsToFile h = hPutBuilder h . encodeLines
 
 encodeLines :: ToJSON a => [a] -> Builder
@@ -304,7 +330,7 @@ watchVal a isPure = do
         put $ S.insert name marked
         put $ M.insert name (False, eId) watched
         tell
-          [ AnyWatch weak name $
+          [ AnyWatch weak name eId (not isPure) $
               unsafeCoerce
                 ( watchRecIO ::
                     Int ->

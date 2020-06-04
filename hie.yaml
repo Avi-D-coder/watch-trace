@@ -1,8 +1,10 @@
 cradle:
-  stack:
-      - path: ./src
-        component: "watch-trace:lib"
-      - path: ./app
-        component: "watch-trace:exe:watch-trace-exe"
-      - path: ./test
-        component: "watch-trace:test:watch-trace-test"
+  cabal:
+    - path: "./src"
+      component: "lib:watch-trace"
+
+    - path: "./app/Main.hs"
+      component: "watch-trace:exe:watch-trace-exe"
+
+    - path: "./test"
+      component: "watch-trace:test:watch-trace-test"
